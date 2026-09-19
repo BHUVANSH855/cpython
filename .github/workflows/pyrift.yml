@@ -1,0 +1,94 @@
+name: PyRift
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pyrift-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pyrift:
+    name: PyRift compatibility check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Install PyRift
+        run: |
+          python -m pip install --disable-pip-version-check \
+            "git+https://github.com/BHUVANSH855/PyRift.git@c199e924bbbba71d9319e925462f739a1d2052fb"
+
+      - name: Run PyRift on changed Python files
+        env:
+          PYRIFT_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          pyrift scan . \
+            --changed-only \
+            --base "$PYRIFT_BASE" \
+            --no-baseline \
+            --format json \
+            --output pyrift-report.json
+
+      - name: Enforce PyRift findings
+        run: |
+          python - <<'PY'
+          import json
+          import sys
+
+          with open("pyrift-report.json", encoding="utf-8") as file:
+              report = json.load(file)
+
+          summary = report["summary"]
+          findings = report["findings"]
+
+          print(f"Files scanned: {summary['files_scanned']}")
+          print(f"Findings: {summary['total_findings']}")
+          print(f"Rule errors: {summary['rule_errors']}")
+
+          if summary["rule_errors"]:
+              print("\nPyRift failed because one or more rules could not execute.")
+              sys.exit(1)
+
+          if not findings:
+              print("\nPyRift: no compatibility findings.")
+              sys.exit(0)
+
+          print("\nPyRift findings:")
+
+          for finding in findings:
+              rule_id = finding.get("rule_id", "UNKNOWN")
+              file_name = finding.get("file", "<unknown>")
+              line = finding.get("line", "?")
+              title = finding.get("title", "")
+              severity = finding.get("severity", "unknown")
+
+              print(
+                  f"- {rule_id} [{severity}] "
+                  f"{file_name}:{line} {title}"
+              )
+
+          print(
+              "\nPyRift found compatibility findings; "
+              "failing the CI check."
+          )
+
+          sys.exit(1)
+          PY
