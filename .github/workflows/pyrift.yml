@@ -34,7 +34,7 @@ jobs:
       - name: Install PyRift
         run: |
           python -m pip install --disable-pip-version-check \
-            "git+https://github.com/BHUVANSH855/PyRift.git@c199e924bbbba71d9319e925462f739a1d2052fb"
+            "git+https://github.com/BHUVANSH855/PyRift.git@eb038119dc797dc61ef4ca7579320ade50fa8425"
 
       - name: Run PyRift on changed Python files
         env:
@@ -42,6 +42,7 @@ jobs:
         run: |
           pyrift scan . \
             --changed-only \
+            --new-from-base \
             --base "$PYRIFT_BASE" \
             --no-baseline \
             --format json \
